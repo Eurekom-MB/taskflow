@@ -1,0 +1,31 @@
+- name: Configurer nginx sur web-01
+  hosts: web
+  gather_facts: false
+
+  tasks:
+    # Le module apt exige python3-apt, absent du Python de l'image python:3.12-slim.
+    # On passe donc par apt-get ; "creates" rend la tâche idempotente.
+    - name: Installer nginx
+      ansible.builtin.shell: >
+        apt-get update -qq &&
+        DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends nginx
+      args:
+        creates: /usr/sbin/nginx
+
+    - name: Déployer la page d'accueil
+      ansible.builtin.template:
+        src: templates/index.html.j2
+        dest: /var/www/html/index.html
+        mode: "0644"
+      notify: Recharger nginx
+
+    # Pas de systemd dans le conteneur : on lance le binaire directement.
+    # "creates" évite de relancer nginx s'il tourne déjà (fichier PID présent).
+    - name: Démarrer nginx
+      ansible.builtin.command: nginx
+      args:
+        creates: /run/nginx.pid
+
+  handlers:
+    - name: Recharger nginx
+      ansible.builtin.command: nginx -s reload
